@@ -98,7 +98,7 @@ The build runs inside the container, as the instance owner. You copy the folder 
 
 ```
 podman exec <your_db2_container_name> rm -rf /tmp/sample27_build
-podman cp <this folder> <your_db2_container_name>:/tmp/sample27_build
+podman cp db2-sample27 <your_db2_container_name>:/tmp/sample27_build
 podman exec <your_db2_container_name> chown -R db2inst1 /tmp/sample27_build
 podman exec <your_db2_container_name> su - db2inst1 -c "bash /tmp/sample27_build/scripts/build_db.sh /tmp/sample27_build"
 ```
@@ -109,11 +109,6 @@ podman exec <your_db2_container_name> su - db2inst1 -c "bash /tmp/sample27_build
 - If a step fails with `No such file or directory` for a file under `sql/` or `ddl/`, the copy is incomplete or from another checkout. Check that `ddl/`, `sql/` and `scripts/` are in the folder you copied, and copy again.
 - The logs are inside the container. To read them on the host: `podman cp <your_db2_container_name>:/tmp/sample27_build/logs ./logs_from_container`
 - Clean up the copy when done: `podman exec <your_db2_container_name> rm -rf /tmp/sample27_build`. The database `SAMPLE27` stays in the container.
-
-Later for testing, log into your Db2 container by enterring:
-```
-podman exec -it <your_db2_container_name> su - db2inst1
-```
 
 To remove the database:
 
@@ -301,16 +296,26 @@ The start of its output:
           20 Mid Atlantic
 ```
 
-The XML sample script from `sqllib/samples/xml/clp`, with the database name changed (`CONNECT TO sample;` becomes `CONNECT TO sample27;`):
+The XML sample script from `sqllib/samples/xml/clp` has `CONNECT TO sample;` in it. On a Db2 with no database called `SAMPLE` it fails with `SQL1013N`, and every later statement with `SQL1024N`. Run a copy with the name changed, and leave the installed file as it is:
 
 ```bash
-db2 -tvf xmlinsert.db2 > out.txt; grep -E "^SQL[0-9]+N" out.txt
+sed 's/CONNECT TO sample;/CONNECT TO sample27;/' xmlinsert.db2 > /tmp/xmlinsert-sample27.db2
+db2 -tvf /tmp/xmlinsert-sample27.db2 > /tmp/out.txt; grep -E "^SQL[0-9]+N" /tmp/out.txt
 ```
 ```
 SQL16203N  XML document input ended before all started tags were ended. ...
 ```
 
 That one error is intended: the script inserts a broken document on purpose, and it deletes its own rows afterwards.
+
+**Sample programs that name the database `sample` themselves.** Many scripts and build files (`bldapp`, `embprep` without a database argument, `xmlinsert.db2` and others) connect to `sample` and fail the same way. Instead of editing each one, give `SAMPLE27` a second name, `SAMPLE`, in the database directory of the instance:
+
+```bash
+db2 catalog database SAMPLE27 as SAMPLE
+db2 terminate
+```
+
+After that `CONNECT TO sample` reaches `SAMPLE27`, and the programs run unchanged. This works only on an instance that has no database called `SAMPLE`, because the name must be free. To undo it: `db2 uncatalog database SAMPLE`, then `db2 terminate`. It adds a name, so it changes no data. Tested with a different alias name on an instance that already has `SAMPLE`; the name `SAMPLE` itself was not tested.
 
 ---
 
@@ -335,7 +340,7 @@ The backup was restored afterwards and the state matched the state before.
 
 | Difference | Effect |
 |---|---|
-| The database is called `SAMPLE27` | Programs that take the database name as an argument work. A program with `sample` hard-coded needs changing. `xmlinsert.db2` has `CONNECT TO sample;` in it |
+| The database is called `SAMPLE27` | Programs that take the database name as an argument work. A program with `sample` hard-coded needs changing, or the alias `SAMPLE` described in section 8. `xmlinsert.db2` has `CONNECT TO sample;` in it |
 | Surrogate keys on four tables | `SALES`, `IN_TRAY`, `MLBLOGS_QUESTIONS` and `MLBLOGS_ANSWERS` have a new first column (`SALES_ID`, `TRAY_ID`, `QUESTION_ID`, `ANSWER_ID`), `GENERATED ALWAYS AS IDENTITY`. `SELECT *` returns one more column. An `INSERT` without a column list must name the columns |
 | `STAFF.SALARY` and `STAFF.COMM` are `DECIMAL(9,2)` | In the original they are `DECIMAL(7,2)`, which caps a salary at 99,999.99. On a fresh original with the same change, `tbread`, `tbmod` and `tbtrig` built, ran and left the same 35 rows and the same salary total, and the `MIN_SALARY` trigger still worked. A program that declares its host variable with 7 digits needs a wider one for large values. Changing the type needs a `REORG` |
 | Repaired dates | 15 hire dates moved back by whole years, 4 birth years moved back 30 years, 3 project end dates moved forward 20 years, 4 résumés corrected. Employee numbers and names are unchanged, so programs that name rows by key (000130, 000140, 000050; Sanders, Wheeler, Hanes) find the same rows; only the dates inside them differ |
