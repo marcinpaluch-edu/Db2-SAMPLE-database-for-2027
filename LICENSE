@@ -1,0 +1,46 @@
+SAMPLE27 Licence
+
+Copyright (c) 2026 Marcin Paluch
+
+1. What this licence covers
+
+   "The Work" means the files of this repository that Marcin Paluch wrote or changed: the build and
+   wrapper scripts, the SQL and DDL changes and additions (data repairs, synthetic rows, added keys,
+   checks, verification, extensions, examples), the test kit, the applications, the documentation and
+   the presentation.
+
+2. What it does not cover
+
+   The IBM Db2 SAMPLE database that SAMPLE27 is derived from: its table and column names, its original
+   schema and data, the exports of it in "reference/", and IBM's sample programs, product
+   names and trademarks. Those stay under IBM's terms, which this licence neither widens nor narrows.
+   Db2 is a trademark of IBM. This project is not affiliated with or endorsed by IBM.
+
+3. Permission
+
+   You may use, copy, modify, merge, publish and distribute the Work, in whole or in part, free of
+   charge, for any purpose, provided that you meet the condition in section 4.
+
+4. Condition: name the author
+
+   Every use that you make public, and every copy, fork or derived work that you give to someone else,
+   must name the author, Marcin Paluch, in a place a reader of that copy or work will see (for
+   example the README, the "About" page, the slides or the documentation), and must keep this licence
+   file and the copyright notices in the files. For a derived work, say that it is derived from
+   SAMPLE27 by Marcin Paluch. A line such as this is enough:
+
+       Based on SAMPLE27 by Marcin Paluch.
+
+   Using SAMPLE27 privately, to test or learn, needs no mention.
+
+5. No warranty
+
+   The Work is provided "as is", without warranty of any kind, express or implied, including but not
+   limited to merchantability, fitness for a particular purpose and non-infringement. The author is not
+   liable for any claim, damage or other liability arising from the Work or its use. In particular,
+   the scripts drop and recreate a database; run them only where that is acceptable.
+
+6. Rights not granted
+
+   Except as stated here, no other rights are granted. Where a file header says "All rights reserved",
+   it is subject to this licence.

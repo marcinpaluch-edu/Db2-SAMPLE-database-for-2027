@@ -1,0 +1,152 @@
+-- =====================================================================
+-- SAMPLE27 - structural and behavioural verification
+-- Copyright (c) 2026 Marcin Paluch. All rights reserved.
+--
+-- Run with autocommit off:  db2 +c -tvf verify.sql
+-- Nothing here changes the database permanently: every test that writes
+-- data is followed by ROLLBACK.  build_db.sh greps the
+-- marker lines (OBJ_TABLES=..., RESIGN_OK, ...) from the output.
+-- =====================================================================
+
+CONNECT TO SAMPLE27;
+
+-- object inventory --------------------------------------------------------
+SELECT 'OBJ_TABLES=' || RTRIM(CHAR(SUM(CASE WHEN TYPE = 'T' THEN 1 ELSE 0 END)))
+    || ' MQT='       || RTRIM(CHAR(SUM(CASE WHEN TYPE = 'S' THEN 1 ELSE 0 END))) AS MARKER
+  FROM SYSCAT.TABLES WHERE TABSCHEMA = 'DB2INST1';
+
+SELECT 'OBJ_VIEWS='  || RTRIM(CHAR(SUM(CASE WHEN TYPE = 'V' THEN 1 ELSE 0 END)))
+    || ' ALIASES='   || RTRIM(CHAR(SUM(CASE WHEN TYPE = 'A' THEN 1 ELSE 0 END))) AS MARKER
+  FROM SYSCAT.TABLES WHERE TABSCHEMA = 'DB2INST1';
+
+SELECT 'OBJ_TRIGGERS=' || RTRIM(CHAR((SELECT COUNT(*) FROM SYSCAT.TRIGGERS WHERE TRIGSCHEMA = 'DB2INST1')))
+    || ' ROUTINES='    || RTRIM(CHAR((SELECT COUNT(*) FROM SYSCAT.ROUTINES
+                                       WHERE ROUTINESCHEMA = 'DB2INST1'
+                                         AND ROUTINENAME IN ('BONUS_INCREASE', 'RESIGN_EMPLOYEE')))) AS MARKER
+  FROM SYSIBM.SYSDUMMY1;
+
+SELECT 'INVALID=' || RTRIM(CHAR((SELECT COUNT(*) FROM SYSCAT.INVALIDOBJECTS WHERE OBJECTSCHEMA = 'DB2INST1'))) AS MARKER
+  FROM SYSIBM.SYSDUMMY1;
+
+-- primary keys added in SAMPLE27 ---------------------------------------------------
+SELECT 'PK_ADDED=' || RTRIM(CHAR(COUNT(*))) AS MARKER
+  FROM SYSCAT.TABCONST
+ WHERE TABSCHEMA = 'DB2INST1' AND TYPE = 'P'
+   AND (TABNAME, CONSTNAME) IN (VALUES ('STAFF','PK_STAFF'), ('ORG','PK_ORG'), ('PATIENTS','PK_PATIENTS'),
+        ('CL_SCHED','PK_CL_SCHED'), ('EMPPROJACT','PK_EMPPROJACT'), ('IN_TRAY','PK_IN_TRAY'),
+        ('SALES','PK_SALES'), ('STAFFG','PK_STAFFG'), ('EMPMDC','PK_EMPMDC'),
+        ('MLBLOGS_QUESTIONS','PK_MLBLOGS_QUESTIONS'), ('MLBLOGS_ANSWERS','PK_MLBLOGS_ANSWERS'));
+
+SELECT 'TABLES_WITHOUT_PK=' || RTRIM(CHAR(COUNT(*))) AS MARKER
+  FROM SYSCAT.TABLES T
+ WHERE T.TABSCHEMA = 'DB2INST1' AND T.TYPE = 'T'
+   AND NOT EXISTS (SELECT 1 FROM SYSCAT.TABCONST C
+                    WHERE C.TABSCHEMA = T.TABSCHEMA AND C.TABNAME = T.TABNAME AND C.TYPE = 'P');
+
+-- generated ids run 1..n with no gaps after the load
+SELECT CASE WHEN (SELECT MIN(SALES_ID) || '-' || MAX(SALES_ID) || '-' || COUNT(*) FROM DB2INST1.SALES) = '1-41-41'
+             AND (SELECT MIN(TRAY_ID) || '-' || MAX(TRAY_ID) FROM DB2INST1.IN_TRAY) = '1-3'
+             AND (SELECT MIN(ANSWER_ID) || '-' || MAX(ANSWER_ID) FROM DB2INST1.MLBLOGS_ANSWERS) = '1-108'
+             AND (SELECT MIN(QUESTION_ID) || '-' || MAX(QUESTION_ID) FROM DB2INST1.MLBLOGS_QUESTIONS) = '1-5'
+            THEN 'SURROGATE_OK' ELSE 'SURROGATE_BAD' END AS MARKER
+  FROM SYSIBM.SYSDUMMY1;
+
+-- relational order date must equal the OrderDate attribute inside the XML ------
+SELECT 'PO_DATE_MISMATCH=' || RTRIM(CHAR(COUNT(*))) AS MARKER
+  FROM DB2INST1.PURCHASEORDER
+ WHERE CHAR(ORDERDATE, ISO) <>
+       XMLCAST(XMLQUERY('$p/PurchaseOrder/@OrderDate' PASSING PORDER AS "p") AS VARCHAR(10));
+
+-- summary table (MQT) was refreshed -----------------------------------------------
+SELECT CASE WHEN (SELECT SUM(NO_OF_EMPLOYEES) FROM DB2INST1.ADEFUSR) = (SELECT COUNT(*) FROM DB2INST1.EMPLOYEE)
+            THEN 'ADEFUSR_ROWS=ok' ELSE 'ADEFUSR_ROWS=BAD' END AS MARKER
+  FROM SYSIBM.SYSDUMMY1;
+
+-- trigger do_not_del_sales: expected to fail with SQL0438N --------------------------
+DELETE FROM DB2INST1.STAFF WHERE ID = 20;
+ROLLBACK;
+
+-- trigger min_salary: a Clerk below 10000 is lifted to 10000 -------------------------
+INSERT INTO DB2INST1.STAFF (ID, NAME, DEPT, JOB, YEARS, SALARY) VALUES (999, 'Tester', 10, 'Clerk', 1, 1000.00);
+SELECT CASE WHEN SALARY = 10000.00 THEN 'MIN_SALARY_OK' ELSE 'MIN_SALARY_BAD' END AS MARKER
+  FROM DB2INST1.STAFF WHERE ID = 999;
+ROLLBACK;
+
+-- resign_employee: returns EMPNO, SALARY and the department (not the job) --------------
+SELECT CASE WHEN EMPNO = '200340' AND DEPT = 'E21' THEN 'RESIGN_OK' ELSE 'RESIGN_BAD' END AS MARKER
+  FROM TABLE(DB2INST1.RESIGN_EMPLOYEE('200340')) AS T;
+ROLLBACK;
+SELECT 'EMP_AFTER_ROLLBACK=' || RTRIM(CHAR(COUNT(*))) AS MARKER FROM DB2INST1.EMPLOYEE;
+
+-- bonus_increase: factor outside 1..2 is rejected with E01 (no data is changed) ---------
+CALL DB2INST1.BONUS_INCREASE(5.00, 99999.99, ?, ?, ?, ?);
+ROLLBACK;
+
+-- foreign key RPAA (PROJACT -> ACT): an unknown activity number is rejected -------------
+INSERT INTO DB2INST1.PROJACT (PROJNO, ACTNO, ACSTDATE) VALUES ('AD3100', 9999, '2026-01-01');
+ROLLBACK;
+
+-- foreign keys added in SAMPLE27: a child row without a parent is rejected (SQL0530N) --------
+-- the message names the constraint, build_db.sh greps for each name
+INSERT INTO DB2INST1.INVENTORY (PID, QUANTITY, LOCATION) VALUES ('999-999-99', 1, 'Nowhere');
+ROLLBACK;
+INSERT INTO DB2INST1.PRODUCTSUPPLIER (PID, SID) VALUES ('999-999-99', '100');
+ROLLBACK;
+INSERT INTO DB2INST1.PRODUCTSUPPLIER (PID, SID) VALUES ('100-100-01', '999');
+ROLLBACK;
+INSERT INTO DB2INST1.EMPPROJACT (EMPNO, PROJNO, ACTNO, EMPTIME, EMSTDATE, EMENDATE)
+  SELECT '999999', PROJNO, ACTNO, EMPTIME, EMSTDATE, EMENDATE FROM DB2INST1.EMPPROJACT FETCH FIRST 1 ROW ONLY;
+ROLLBACK;
+
+-- delete rules ------------------------------------------------------------------------------------
+-- FK_EMPPROJACT_EMP is ON DELETE RESTRICT: an employee with assignments cannot be deleted (SQL0532N)
+DELETE FROM DB2INST1.EMPLOYEE WHERE EMPNO = '200120';
+ROLLBACK;
+-- FK_INVENTORY_PROD and FK_PRODSUPP_PROD are ON DELETE CASCADE: deleting a product removes its stock
+-- and supplier links; FK_PRODSUPP_SUPP: deleting a supplier removes only that supplier's links
+DELETE FROM DB2INST1.PRODUCT WHERE PID = '100-110-01';
+SELECT CASE WHEN (SELECT COUNT(*) FROM DB2INST1.INVENTORY WHERE PID = '100-110-01') = 0
+             AND (SELECT COUNT(*) FROM DB2INST1.PRODUCTSUPPLIER WHERE PID = '100-110-01') = 0
+             AND (SELECT COUNT(*) FROM DB2INST1.INVENTORY) = 5
+             AND (SELECT COUNT(*) FROM DB2INST1.PRODUCTSUPPLIER) = 4
+            THEN 'CASCADE_PRODUCT_OK' ELSE 'CASCADE_PRODUCT_BAD' END AS MARKER
+  FROM SYSIBM.SYSDUMMY1;
+ROLLBACK;
+DELETE FROM DB2INST1.SUPPLIERS WHERE SID = '102';
+SELECT CASE WHEN (SELECT COUNT(*) FROM DB2INST1.PRODUCTSUPPLIER WHERE SID = '102') = 0
+             AND (SELECT COUNT(*) FROM DB2INST1.PRODUCTSUPPLIER) = 4
+             AND (SELECT COUNT(*) FROM DB2INST1.PRODUCT) = 6
+            THEN 'CASCADE_SUPPLIER_OK' ELSE 'CASCADE_SUPPLIER_BAD' END AS MARKER
+  FROM SYSIBM.SYSDUMMY1;
+ROLLBACK;
+SELECT CASE WHEN (SELECT COUNT(*) FROM DB2INST1.PRODUCTSUPPLIER) = 6 AND (SELECT COUNT(*) FROM DB2INST1.INVENTORY) = 6
+            THEN 'CASCADE_ROLLED_BACK_OK' ELSE 'CASCADE_ROLLED_BACK_BAD' END AS MARKER
+  FROM SYSIBM.SYSDUMMY1;
+
+-- SAMPSEQUENCE feeds PURCHASEORDER.POID: the two synthetic orders carry 5007 and 5008 ----------
+SELECT CASE WHEN (SELECT MAX(POID) FROM DB2INST1.PURCHASEORDER) = 5008
+             AND (SELECT COUNT(*) FROM DB2INST1.PURCHASEORDER WHERE POID > 5006) = 2
+            THEN 'SEQ_PO_OK' ELSE 'SEQ_PO_BAD' END AS MARKER
+  FROM SYSIBM.SYSDUMMY1;
+
+-- primary key STAFF(ID): a duplicate id is rejected (SQL0803N) -------------------------
+INSERT INTO DB2INST1.STAFF (ID, NAME, DEPT, JOB, YEARS, SALARY) VALUES (10, 'Dup', 10, 'Clerk', 1, 20000.00);
+ROLLBACK;
+
+-- primary key PATIENTS(PATIENT_ID): a NULL id is rejected (SQL0407N) ----------------------
+INSERT INTO DB2INST1.PATIENTS (PATIENT_ID, NAME) VALUES (NULL, 'Nobody');
+ROLLBACK;
+
+-- new row without an id gets a generated one (what a Node app will do) ---------------
+INSERT INTO DB2INST1.SALES (SALES_DATE, SALES_PERSON, REGION, SALES) VALUES ('2026-11-08', 'TESTER', 'Ontario-North', 1);
+-- Db2 caches identity values in blocks of 20, so a new id may skip numbers; it only has to be unique and higher.
+SELECT CASE WHEN SALES_ID > 41 THEN 'NEW_SALES_ID_OK' ELSE 'NEW_SALES_ID_BAD' END AS MARKER
+  FROM DB2INST1.SALES WHERE SALES_PERSON = 'TESTER';
+ROLLBACK;
+
+-- composite natural key EMPPROJACT: the same row twice is rejected ---------------------
+INSERT INTO DB2INST1.EMPPROJACT (EMPNO, PROJNO, ACTNO, EMPTIME, EMSTDATE, EMENDATE)
+  SELECT EMPNO, PROJNO, ACTNO, EMPTIME, EMSTDATE, EMENDATE FROM DB2INST1.EMPPROJACT FETCH FIRST 1 ROW ONLY;
+ROLLBACK;
+
+CONNECT RESET;

@@ -1,0 +1,49 @@
+-- =====================================================================
+-- SAMPLE27 - data load (for running the build steps by hand, e.g. in a Db2 command window)
+-- Copyright (c) 2026 Marcin Paluch. All rights reserved.
+--
+-- scripts/build_db.sh generates the same statements itself and does not use this file.
+-- The original sample data is not in this repository. Create it first, from Db2 itself (a temporary database S27SRC):
+--     db2sampl -name S27SRC -sql -xml -vector -force
+--     mkdir source
+--     cd source
+--     db2move S27SRC export -sn DB2INST1
+--     cd ..
+--     (then drop S27SRC:  db2 force application all, db2 deactivate database S27SRC, db2 terminate, db2 drop database S27SRC)
+-- Run this file from the repository folder, after ddl/sample27.ddl:   db2 -tf sql/load_data.sql
+-- The three circular keys are relaxed during the load and enforced again at the end.
+-- Messages of each IMPORT go to imp_<TABLE>.txt in the current folder.
+-- =====================================================================
+CONNECT TO SAMPLE27;
+ALTER TABLE DB2INST1.DEPARTMENT ALTER FOREIGN KEY RDE NOT ENFORCED;
+ALTER TABLE DB2INST1.DEPARTMENT ALTER FOREIGN KEY ROD NOT ENFORCED;
+ALTER TABLE DB2INST1.PROJECT ALTER FOREIGN KEY RPP NOT ENFORCED;
+IMPORT FROM source/tab1.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_ACT.txt INSERT INTO DB2INST1.ACT ;
+IMPORT FROM source/tab5.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_DEPARTMENT.txt INSERT INTO DB2INST1.DEPARTMENT ;
+IMPORT FROM source/tab6.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_EMPLOYEE.txt INSERT INTO DB2INST1.EMPLOYEE ;
+IMPORT FROM source/tab9.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_EMP_PHOTO.txt INSERT INTO DB2INST1.EMP_PHOTO ;
+IMPORT FROM source/tab10.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_EMP_RESUME.txt INSERT INTO DB2INST1.EMP_RESUME ;
+IMPORT FROM source/tab20.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_PROJECT.txt INSERT INTO DB2INST1.PROJECT ;
+IMPORT FROM source/tab19.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_PROJACT.txt INSERT INTO DB2INST1.PROJACT ;
+IMPORT FROM source/tab8.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_EMPPROJACT.txt INSERT INTO DB2INST1.EMPPROJACT ;
+IMPORT FROM source/tab3.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_CL_SCHED.txt INSERT INTO DB2INST1.CL_SCHED ;
+IMPORT FROM source/tab12.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_IN_TRAY.txt INSERT INTO DB2INST1.IN_TRAY (RECEIVED, SOURCE, SUBJECT, NOTE_TEXT);
+IMPORT FROM source/tab15.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_ORG.txt INSERT INTO DB2INST1.ORG ;
+IMPORT FROM source/tab23.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_STAFF.txt INSERT INTO DB2INST1.STAFF ;
+IMPORT FROM source/tab22.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_SALES.txt INSERT INTO DB2INST1.SALES (SALES_DATE, SALES_PERSON, REGION, SALES);
+IMPORT FROM source/tab24.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_STAFFG.txt INSERT INTO DB2INST1.STAFFG ;
+IMPORT FROM source/tab7.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_EMPMDC.txt INSERT INTO DB2INST1.EMPMDC ;
+IMPORT FROM source/tab17.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_PRODUCT.txt INSERT INTO DB2INST1.PRODUCT ;
+IMPORT FROM source/tab11.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_INVENTORY.txt INSERT INTO DB2INST1.INVENTORY ;
+IMPORT FROM source/tab4.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_CUSTOMER.txt INSERT INTO DB2INST1.CUSTOMER ;
+IMPORT FROM source/tab21.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_PURCHASEORDER.txt INSERT INTO DB2INST1.PURCHASEORDER ;
+IMPORT FROM source/tab2.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_CATALOG.txt INSERT INTO DB2INST1.CATALOG ;
+IMPORT FROM source/tab25.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_SUPPLIERS.txt INSERT INTO DB2INST1.SUPPLIERS ;
+IMPORT FROM source/tab18.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_PRODUCTSUPPLIER.txt INSERT INTO DB2INST1.PRODUCTSUPPLIER ;
+IMPORT FROM source/tab16.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_PATIENTS.txt INSERT INTO DB2INST1.PATIENTS ;
+IMPORT FROM source/tab14.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_MLBLOGS_QUESTIONS.txt INSERT INTO DB2INST1.MLBLOGS_QUESTIONS (QUESTION, EMBEDDING);
+IMPORT FROM source/tab13.ixf OF IXF LOBS FROM source XML FROM source MESSAGES imp_MLBLOGS_ANSWERS.txt INSERT INTO DB2INST1.MLBLOGS_ANSWERS (ANSWER, EMBEDDING);
+ALTER TABLE DB2INST1.DEPARTMENT ALTER FOREIGN KEY RDE ENFORCED;
+ALTER TABLE DB2INST1.DEPARTMENT ALTER FOREIGN KEY ROD ENFORCED;
+ALTER TABLE DB2INST1.PROJECT ALTER FOREIGN KEY RPP ENFORCED;
+CONNECT RESET;
